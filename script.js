@@ -55,3 +55,212 @@ $('#menuButton').addEventListener('click', () => { const menu = $('.main-nav'); 
 document.querySelectorAll('.main-nav a').forEach(a => a.addEventListener('click', () => $('.main-nav').classList.remove('open')));
 window.addEventListener('scroll', () => $('.site-header').classList.toggle('scrolled', window.scrollY > 5));
 renderProducts(); renderCart();
+
+/* ─── Scroll-triggered reveal ─────────────────────────────────────────────── */
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function initReveal() {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target); // fire once
+        }
+      });
+    },
+    { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+  );
+
+  document.querySelectorAll('.reveal').forEach(el => {
+    if (prefersReducedMotion) {
+      el.classList.add('is-visible');
+    } else {
+      observer.observe(el);
+    }
+  });
+}
+initReveal();
+
+/* ─── Custom scrollbar: draggable shoe thumb + neon-red pixel trail ──────────── */
+(function initCustomScrollbar() {
+  const container = document.getElementById('custom-scrollbar');
+  const track     = document.getElementById('scrollbar-track');
+  const thumb     = document.getElementById('scrollbar-thumb');
+  const canvas    = document.getElementById('trail-canvas');
+  if (!container || !track || !thumb || !canvas) return;
+
+  const ctx       = canvas.getContext('2d');
+  const TRACK_PAD = 6;  // matches CSS: track top:6px / bottom:6px within container
+  const PIXEL     = 3;  // trail pixel block size
+
+  /* canvas sizing — matches container's physical pixel size */
+  function resizeCanvas() {
+    const w = container.offsetWidth || 62;
+    const h = window.innerHeight;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+  }
+  resizeCanvas();
+
+  /* live measurements so desktop/mobile auto-adapt */
+  function thumbH() {
+    return thumb.offsetHeight || 27;
+  }
+  function maxScroll() {
+    return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  }
+  function travelRange() {
+    return Math.max(1, window.innerHeight - 2 * TRACK_PAD - thumbH());
+  }
+
+  /* thumb travel = pixels from top of track to thumb's top edge */
+  function thumbTravel() {
+    const ms = maxScroll();
+    return ms > 0 ? Math.min((window.scrollY || window.pageYOffset || 0) / ms, 1) * travelRange() : 0;
+  }
+
+  let prevTravel = 0;
+
+  function updateThumb(doTrail) {
+    const travel = thumbTravel();
+    thumb.style.top = (TRACK_PAD + travel) + 'px';
+
+    if (doTrail && !prefersReducedMotion) {
+      const th  = thumbH();
+      const fmY = TRACK_PAD + prevTravel + th / 2;
+      const toY = TRACK_PAD + travel     + th / 2;
+      if (Math.abs(toY - fmY) > 0.5) spawnPixelTrail(fmY, toY);
+    }
+    prevTravel = travel;
+  }
+
+  /* initial placement */
+  updateThumb(false);
+
+  /* ─ pixel trail particles ─ */
+  const particles = [];
+
+  function spawnPixelTrail(fromY, toY) {
+    // compute track center x dynamically so responsive breakpoint works
+    const trackRight = parseInt(window.getComputedStyle(track).right, 10) || 30;
+    const trackX = canvas.width - trackRight - 1;
+    const minY   = Math.min(fromY, toY);
+    const maxY   = Math.max(fromY, toY);
+
+    for (let y = minY; y <= maxY; y += PIXEL) {
+      const cols = Math.random() > 0.4 ? 2 : 1;
+      for (let i = 0; i < cols; i++) {
+        const xOff = (Math.floor(Math.random() * 3) - 1) * PIXEL;
+        particles.push({
+          x:     trackX + xOff,
+          y,
+          alpha: 0.55 + Math.random() * 0.40,
+          decay: 0.020 + Math.random() * 0.025,
+        });
+      }
+    }
+    scheduleRender();
+  }
+
+  /* RAF loop — only active while particles exist */
+  let rafId = null;
+
+  function scheduleRender() {
+    if (!rafId) rafId = requestAnimationFrame(renderLoop);
+  }
+
+  function renderLoop() {
+    rafId = null;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.alpha -= p.decay;
+      if (p.alpha <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+
+      ctx.save();
+      ctx.shadowColor = '#ff1a2e';
+      ctx.shadowBlur  = 4;
+      ctx.fillStyle   = `rgba(255,26,46,${p.alpha.toFixed(3)})`;
+      ctx.fillRect(Math.round(p.x), Math.round(p.y), PIXEL, PIXEL);
+      ctx.restore();
+    }
+
+    if (particles.length > 0) rafId = requestAnimationFrame(renderLoop);
+  }
+
+  /* scroll & resize listeners */
+  window.addEventListener('scroll', () => updateThumb(true), { passive: true });
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    updateThumb(false);
+  });
+  window.addEventListener('load', () => {
+    resizeCanvas();
+    updateThumb(false);
+  });
+
+  /* drag */
+  let dragging    = false;
+  let dragOffsetY = 0;
+
+  function startDrag(clientY) {
+    dragging = true;
+    dragOffsetY = clientY - thumb.getBoundingClientRect().top;
+    document.body.style.userSelect = 'none';
+    document.documentElement.style.scrollBehavior = 'auto'; // ensure instant response while dragging
+  }
+
+  function moveDrag(clientY) {
+    if (!dragging) return;
+    const relTravel = clientY - TRACK_PAD - dragOffsetY;
+    const range     = travelRange();
+    const clamped   = Math.max(0, Math.min(relTravel, range));
+    const targetScroll = (clamped / range) * maxScroll();
+    window.scrollTo(0, targetScroll);
+  }
+
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.userSelect = '';
+    document.documentElement.style.scrollBehavior = ''; // restore smooth scroll
+  }
+
+  /* mouse events */
+  thumb.addEventListener('mousedown', e => {
+    e.preventDefault();
+    startDrag(e.clientY);
+  });
+  window.addEventListener('mousemove', e => moveDrag(e.clientY));
+  window.addEventListener('mouseup',   endDrag);
+
+  /* touch events */
+  thumb.addEventListener('touchstart', e => {
+    e.preventDefault();
+    startDrag(e.touches[0].clientY);
+  }, { passive: false });
+  window.addEventListener('touchmove', e => {
+    if (dragging) {
+      e.preventDefault();
+      moveDrag(e.touches[0].clientY);
+    }
+  }, { passive: false });
+  window.addEventListener('touchend', endDrag);
+
+  /* click on track to jump */
+  track.addEventListener('click', e => {
+    if (thumb.contains(e.target)) return;
+    const trackRect = track.getBoundingClientRect();
+    const relY      = e.clientY - trackRect.top - thumbH() / 2;
+    const range     = travelRange();
+    const clamped   = Math.max(0, Math.min(relY, range));
+    window.scrollTo({ top: (clamped / range) * maxScroll(), behavior: 'smooth' });
+  });
+})();
