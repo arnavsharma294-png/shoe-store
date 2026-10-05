@@ -8,7 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=3" />
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          for (var r of regs) r.unregister();
+        });
+      }
+    </script>
   </head>
   <body>
     <div class="announcement">Free express shipping on orders over $150 <span>•</span> Easy 30-day returns</div>
@@ -93,6 +100,16 @@
       <div class="cart-footer" id="cartFooter" hidden><div class="total-line"><span>Subtotal</span><strong id="cartTotal">$0.00</strong></div><p>Taxes and shipping calculated at checkout.</p><button class="button button-accent" id="checkoutButton">Checkout <span>→</span></button></div>
     </aside>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="script.js"></script>
+
+    <!-- Custom shoe scrollbar -->
+    <div id="custom-scrollbar" aria-hidden="true">
+      <div id="scrollbar-track"></div>
+      <canvas id="trail-canvas"></canvas>
+      <div id="scrollbar-thumb">
+        <img src="pixel-shoe.png?v=3" alt="Scrollbar thumb" draggable="false" />
+      </div>
+    </div>
+
+    <script src="script.js?v=3"></script>
   </body>
 </html>
